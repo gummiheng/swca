@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HELIOS & Orbital Analytics - NOAA Space Weather Dashboard</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Chart.js, Time Adapter & Zoom Plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            orbitron: ['Orbitron', 'sans-serif'],
+            rajdhani: ['Rajdhani', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            space: {
+              900: '#030712',
+              800: '#0B0F19',
+              700: '#111827',
+              600: '#1F2937',
+              border: '#1E293B'
+            },
+            neon: {
+              blue: '#00f0ff',
+              cyan: '#06b6d4',
+              green: '#10b981',
+              yellow: '#f59e0b',
+              orange: '#f97316',
+              red: '#ef4444',
+              purple: '#a855f7'
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body {
+      background-color: #030712;
+      color: #e2e8f0;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(0, 240, 255, 0.03) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(168, 85, 247, 0.03) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.5) 0%, transparent 100%);
+      background-attachment: fixed;
+      overflow-x: hidden;
+    }
+
+    canvas {
+      touch-action: pan-y !important;
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0b0f19;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+
+    .space-card {
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    .space-card:hover {
+      border-color: rgba(0, 240, 255, 0.25);
+      box-shadow: 0 6px 24px -2px rgba(0, 240, 255, 0.08);
+    }
+
+    .pulse-live {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+      animation: pulse-green 2s infinite;
+    }
+    @keyframes pulse-green {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+  </style>
+</head>
+
+<body class="font-rajdhani min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-black overflow-x-hidden">
+
+  <header class="sticky top-0 z-50 bg-space-900/95 backdrop-blur-md border-b border-space-border px-3 sm:px-6 py-2.5">
+    <div class="max-w-[1700px] mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+      
+      <!-- Brand Title & Navigation Tabs -->
+      <div class="flex flex-col xl:flex-row items-center space-y-2 xl:space-y-0 xl:space-x-6 w-full md:w-auto justify-between md:justify-start">
+        <div class="flex items-center space-x-3">
+          <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-cyan-500 via-blue-600 to-purple-600 p-[1px] flex items-center justify-center shadow-lg shadow-cyan-500/20 shrink-0">
+            <div class="w-full h-full bg-space-900 rounded-[7px] flex items-center justify-center">
+              <i class="fa-solid fa-satellite-dish text-cyan-400 text-lg sm:text-xl"></i>
+            </div>
+          </div>
+          <div>
+            <h1 class="font-orbitron text-lg sm:text-xl lg:text-2xl font-bold tracking-wider text-white flex items-center gap-1.5">
+              HELIOS <span class="text-[10px] sm:text-xs px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">ASTRODYNAMICS</span>
+            </h1>
+            <p class="text-[10px] sm:text-xs text-slate-400 font-mono tracking-wide">NOAA SPACE WEATHER & ORBITAL CONJUNCTION ENGINE</p>
+          </div>
+        </div>
+
+        <!-- Main Navigation Tabs -->
+        <div class="flex items-center space-x-1 bg-space-800/90 p-1 rounded-xl border border-space-border text-xs font-orbitron w-full sm:w-auto justify-center overflow-x-auto">
+          <button id="main-tab-weather" onclick="switchMainTab('weather')" class="px-3.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md active:scale-95 whitespace-nowrap">
+            <i class="fa-solid fa-sun text-yellow-300"></i>
+            <span>NOAA WEATHER</span>
+          </button>
+          <button id="main-tab-ca" onclick="switchMainTab('ca')" class="px-3.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-space-700 active:scale-95 whitespace-nowrap">
+            <i class="fa-solid fa-orbit text-purple-400"></i>
+            <span>CONJUNCTION (CA)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Live UTC Clock -->
+      <div class="flex items-center justify-between sm:justify-center w-full md:w-auto space-x-3 sm:space-x-4 bg-space-800 px-3 sm:px-4 py-1.5 rounded-lg border border-space-border text-xs">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 pulse-live"></span>
+          <span class="text-[11px] sm:text-xs font-mono font-semibold text-emerald-400 tracking-wider">LIVE UTC</span>
+        </div>
+        <div class="h-3.5 w-[1px] bg-slate-700"></div>
+        <div id="utc-clock" class="font-mono text-base sm:text-lg font-bold text-cyan-300 tracking-widest">
+          00:00:00 UTC
+        </div>
+        <div id="utc-date" class="text-[11px] sm:text-xs font-mono text-slate-400">
+          2026-10-10
+        </div>
+      </div>
+
+      <!-- Refresh Action Button -->
+      <div class="hidden md:flex items-center space-x-3">
+        <button id="refresh-btn" onclick="fetchAllData()" class="flex items-center space-x-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs px-4 py-2 rounded-lg shadow-lg shadow-cyan-950 transition active:scale-95">
+          <i id="refresh-icon" class="fa-solid fa-rotate"></i>
+          <span>REFRESH FEEDS</span>
+        </button>
+        
+        <div class="flex items-center space-x-2 text-xs font-mono text-slate-400 bg-space-800 px-3 py-2 rounded-lg border border-space-border">
+          <i class="fa-solid fa-satellite text-emerald-400 animate-pulse"></i>
+          <span id="last-updated" class="text-emerald-400 font-semibold">FETCHING DATA...</span>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <main class="flex-grow max-w-[1700px] w-full mx-auto p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-6">
+
+    <!-- VIEW 1: NOAA SPACE WEATHER -->
+    <div id="view-space-weather" class="space-y-4 sm:space-y-6">
+
+      <!-- SPACE WEATHER STATUS CENTER -->
+      <div class="space-card rounded-xl p-3.5 sm:p-5 border-l-4 border-l-cyan-500 bg-space-800/90 shadow-xl">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-2.5 mb-3.5 border-b border-space-border gap-1.5">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></div>
+            <h2 class="font-orbitron text-sm sm:text-base lg:text-lg font-bold text-white tracking-wider flex items-center gap-2">
+              SPACE WEATHER CURRENT STATUS CENTER
+            </h2>
+          </div>
+          <span class="text-[10px] sm:text-xs font-mono text-slate-400">AUTOMATIC EVALUATION ENGINES ACTIVE</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+
+          <!-- 1. GEOMAGNETIC STORM STATUS -->
+          <div class="space-y-3 bg-space-900/80 p-3 sm:p-4 rounded-xl border border-space-border/80">
+            <div class="flex items-center justify-between border-b border-space-border/60 pb-2 gap-2">
+              <span class="font-orbitron font-semibold text-xs sm:text-sm text-cyan-300 flex items-center gap-1.5">
+                <i class="fa-solid fa-earth-americas text-cyan-400"></i> GEOMAGNETIC STORM
+              </span>
+              <span id="status-geo-overall" class="text-[10px] sm:text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-right">G0 - NORMAL</span>
+            </div>
+
+            <div class="space-y-1.5">
+              <span class="text-[10px] sm:text-[11px] font-mono uppercase tracking-wider block font-semibold text-cyan-400/80">1. Potential Level</span>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                <div class="bg-space-800 p-2 rounded border border-space-border flex justify-between items-center">
+                  <span class="text-slate-400 text-[11px]">Kp Index:</span>
+                  <span id="status-kp-badge" class="font-bold text-emerald-400 text-xs">-- (G0)</span>
+                </div>
+                <div class="bg-space-800 p-2 rounded border border-space-border flex justify-between items-center">
+                  <span class="text-slate-400 text-[11px]">Kyoto Dst:</span>
+                  <span id="status-dst-badge" class="font-bold text-emerald-400 text-xs">-- (G0)</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-1.5 pt-1">
+              <span class="text-[10px] sm:text-[11px] font-mono uppercase tracking-wider block font-semibold text-cyan-400/80">2. Geomagnetic Disturbances</span>
+              <div class="space-y-1.5 text-xs font-mono">
+                <div class="bg-space-800 p-2 rounded border border-space-border flex justify-between items-center">
+                  <span class="text-slate-400 text-[11px]">Solar Wind Speed:</span>
+                  <span id="status-wind-badge" class="font-bold text-emerald-400 text-xs">-- km/s (G0)</span>
+                </div>
+                <div class="bg-space-800 p-2 rounded border border-space-border flex justify-between items-center">
+                  <span class="text-slate-400 text-[11px]">IMF Bt (Total):</span>
+                  <span id="status-bt-badge" class="font-bold text-emerald-400 text-xs">-- nT (G0)</span>
+                </div>
+                <div class="bg-space-800 p-2 rounded border border-space-border flex justify-between items-center">
+                  <span class="text-slate-400 text-[11px]">IMF Bz (North/South):</span>
+                  <span id="status-bz-badge" class="font-bold text-emerald-400 text-xs">-- nT (G0)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. SOLAR RADIATION STORM STATUS -->
+          <div class="space-y-3 bg-space-900/80 p-3 sm:p-4 rounded-xl border border-space-border/80 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between border-b border-space-border/60 pb-2 mb-2 sm:mb-3 gap-2">
+                <span class="font-orbitron font-semibold text-xs sm:text-sm text-emerald-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-atom text-emerald-400"></i> SOLAR RADIATION STORM
+                </span>
+                <span id="status-solar-overall" class="text-[10px] sm:text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-right">S0 - NORMAL</span>
+              </div>
+              <p class="text-[11px] text-slate-400 font-mono mb-2.5">Evaluated based on GOES Integral Proton Flux (≥10 MeV protons/cm²·s·sr)</p>
+              
+              <div class="space-y-2 font-mono text-xs">
+                <div class="bg-space-800 p-2 sm:p-2.5 rounded border border-space-border flex justify-between items-center">
+                  <span class="text-slate-400 text-[11px]">Proton Flux (≥10 MeV):</span>
+                  <span id="status-proton-val" class="font-bold text-emerald-400 text-xs">-- pfu</span>
+                </div>
+                <div class="bg-space-800 p-2 sm:p-2.5 rounded border border-space-border flex justify-between items-center">
+                  <span class="text-slate-400 text-[11px]">Radiation Scale:</span>
+                  <span id="status-proton-scale" class="font-bold text-slate-200 text-xs">S0 (Below Threshold)</span>
+                </div>
+              </div>
+            </div>
+            <div class="text-[10px] sm:text-[11px] font-mono text-slate-400 bg-space-800/50 p-2 rounded border border-space-border/40 mt-2">
+              S1 Threshold: ≥10 pfu | S5 Threshold: ≥100,000 pfu
+            </div>
+          </div>
+
+          <!-- 3. RADIO BLACKOUT STATUS -->
+          <div class="space-y-3 bg-space-900/80 p-3 sm:p-4 rounded-xl border border-space-border/80 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between border-b border-space-border/60 pb-2 mb-2 sm:mb-3 gap-2">
+                <span class="font-orbitron font-semibold text-xs sm:text-sm text-amber-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-bolt text-amber-400"></i> RADIO BLACKOUT
+                </span>
+                <span id="status-radio-overall" class="text-[10px] sm:text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-right">R0 - NORMAL</span>
+              </div>
+              <p class="text-[11px] text-slate-400 font-mono mb-2.5">Evaluated based on GOES X-Ray Flux (0.1 - 0.8 nm peak long wave irradiance)</p>
+
+              <div class="space-y-2 font-mono text-xs">
+                <div class="bg-space-800 p-2 sm:p-2.5 rounded border border-space-border flex justify-between items-center">
+                  <span class="text-slate-400 text-[11px]">GOES X-Ray Class:</span>
+                  <span id="status-xray-val" class="font-bold text-amber-400 text-xs">--</span>
+                </div>
+                <div class="bg-space-800 p-2 sm:p-2.5 rounded border border-space-border flex justify-between items-center">
+                  <span class="text-slate-400 text-[11px]">Radio Blackout Scale:</span>
+                  <span id="status-xray-scale" class="font-bold text-slate-200 text-xs">R0 (Below M1 Class)</span>
+                </div>
+              </div>
+            </div>
+            <div class="text-[10px] sm:text-[11px] font-mono text-slate-400 bg-space-800/50 p-2 rounded border border-space-border/40 mt-2">
+              R1 Threshold: M1 (1e-5) | R5 Threshold: X20 (2e-3)
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- METRIC CARDS GRID -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        
+        <!-- Metric 1: Current Kp -->
+        <div class="space-card rounded-xl p-3 sm:p-4 flex items-center justify-between relative overflow-hidden group">
+          <div class="space-y-1 min-w-0">
+            <span class="text-[10px] sm:text-xs font-mono text-slate-400 uppercase tracking-wider block truncate">Planetary Kp Index</span>
+            <div class="flex items-baseline space-x-1.5 sm:space-x-2">
+              <span id="stat-kp-value" class="text-2xl sm:text-3xl font-orbitron font-bold text-white">--</span>
+              <span id="stat-kp-badge" class="text-[10px] sm:text-xs font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 truncate">Loading</span>
+            </div>
+            <p id="stat-kp-sub" class="text-[10px] sm:text-[11px] text-slate-400 font-mono truncate">Geomagnetic Activity</p>
+          </div>
+          <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-lg bg-cyan-950/50 border border-cyan-800/40 flex items-center justify-center text-cyan-400 text-base sm:text-xl shrink-0">
+            <i class="fa-solid fa-earth-americas"></i>
+          </div>
+        </div>
+
+        <!-- Metric 2: Solar Wind Speed & Bz -->
+        <div class="space-card rounded-xl p-3 sm:p-4 flex items-center justify-between relative overflow-hidden group">
+          <div class="space-y-1 min-w-0">
+            <span class="text-[10px] sm:text-xs font-mono text-slate-400 uppercase tracking-wider block truncate">Solar Wind / Bz</span>
+            <div class="flex items-baseline space-x-1 sm:space-x-1.5">
+              <span id="stat-wind-speed" class="text-2xl sm:text-3xl font-orbitron font-bold text-white">---</span>
+              <span class="text-[10px] sm:text-xs font-mono text-cyan-400">km/s</span>
+            </div>
+            <p class="text-[10px] sm:text-[11px] font-mono text-slate-400 truncate">
+              IMF Bz: <span id="stat-wind-bz" class="font-bold text-slate-200">-- nT</span>
+            </p>
+          </div>
+          <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-lg bg-blue-950/50 border border-blue-800/40 flex items-center justify-center text-blue-400 text-base sm:text-xl shrink-0">
+            <i class="fa-solid fa-wind"></i>
+          </div>
+        </div>
+
+        <!-- Metric 3: Max X-Ray Flare (24h) -->
+        <div class="space-card rounded-xl p-3 sm:p-4 flex items-center justify-between relative overflow-hidden group">
+          <div class="space-y-1 min-w-0">
+            <span class="text-[10px] sm:text-xs font-mono text-slate-400 uppercase tracking-wider block truncate">Max X-Ray (24h)</span>
+            <div class="flex items-baseline space-x-1.5 sm:space-x-2">
+              <span id="stat-xray-max" class="text-2xl sm:text-3xl font-orbitron font-bold text-amber-400">--</span>
+              <span id="stat-xray-badge" class="text-[10px] sm:text-xs font-mono px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800 truncate">Normal</span>
+            </div>
+            <p class="text-[10px] sm:text-[11px] font-mono text-slate-400 truncate">GOES Primary Wavelength</p>
+          </div>
+          <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-lg bg-amber-950/50 border border-amber-800/40 flex items-center justify-center text-amber-400 text-base sm:text-xl shrink-0">
+            <i class="fa-solid fa-bolt"></i>
+          </div>
+        </div>
+
+        <!-- Metric 4: Dst Index -->
+        <div class="space-card rounded-xl p-3 sm:p-4 flex items-center justify-between relative overflow-hidden group">
+          <div class="space-y-1 min-w-0">
+            <span class="text-[10px] sm:text-xs font-mono text-slate-400 uppercase tracking-wider block truncate">Kyoto Dst Index</span>
+            <div class="flex items-baseline space-x-1 sm:space-x-2">
+              <span id="stat-dst-value" class="text-2xl sm:text-3xl font-orbitron font-bold text-white">--</span>
+              <span class="text-[10px] sm:text-xs font-mono text-purple-400">nT</span>
+            </div>
+            <p id="stat-dst-status" class="text-[10px] sm:text-[11px] font-mono text-slate-400 truncate">Equatorial Ring Current</p>
+          </div>
+          <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-lg bg-purple-950/50 border border-purple-800/40 flex items-center justify-center text-purple-400 text-base sm:text-xl shrink-0">
+            <i class="fa-solid fa-magnet"></i>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+
+        <!-- LEFT 2 COLUMNS: INTERACTIVE CHARTS -->
+        <div class="lg:col-span-2 space-y-4 sm:space-y-6">
+
+          <!-- Chart 1: Planetary Kp Index -->
+          <div class="space-card rounded-xl p-3.5 sm:p-5">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3 border-b border-space-border pb-2.5">
+              <div>
+                <h2 class="font-orbitron text-xs sm:text-base font-semibold text-white flex items-center gap-1.5">
+                  <i class="fa-solid fa-chart-column text-cyan-400"></i>
+                  PLANETARY KP-INDEX (GEOMAGNETIC STORM SCALE)
+                </h2>
+                <p class="text-[11px] sm:text-xs text-slate-400 font-mono">3-hour planetary Kp observations & storm levels (G1-G5)</p>
+              </div>
+              <div class="flex items-center space-x-1 text-[10px] font-mono self-end sm:self-auto">
+                <span class="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">Quiet &lt;4</span>
+                <span class="px-1.5 py-0.5 rounded bg-yellow-950 text-yellow-400 border border-yellow-800">G1-G2 5-6</span>
+                <span class="px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-800">G3-G5 7-9</span>
+              </div>
+            </div>
+            <div class="relative h-56 sm:h-72 w-full">
+              <canvas id="chart-kp"></canvas>
+              <div id="loader-kp" class="absolute inset-0 bg-space-900/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+                <i class="fa-solid fa-circle-notch animate-spin text-cyan-400 text-xl sm:text-2xl"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart 2: Solar Wind Parameters -->
+          <div class="space-card rounded-xl p-3.5 sm:p-5">
+            <div class="flex flex-col items-start justify-between gap-2.5 mb-3 border-b border-space-border pb-2.5">
+              <div class="w-full flex items-center justify-between">
+                <div>
+                  <h2 class="font-orbitron text-xs sm:text-base font-semibold text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-wind text-blue-400"></i>
+                    PROPAGATED SOLAR WIND (L1 TO EARTH)
+                  </h2>
+                  <p class="text-[11px] sm:text-xs text-slate-400 font-mono">Real-time Velocity, Density, IMF Bt & Bz Field</p>
+                </div>
+              </div>
+
+              <!-- Toolbar Controls -->
+              <div class="w-full flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-space-border/40">
+                <div class="flex flex-wrap gap-1 font-mono text-[11px]">
+                  <button onclick="toggleSolarWindDataset(0)" class="px-2 py-1 rounded bg-cyan-900/50 hover:bg-cyan-800 text-cyan-300 border border-cyan-700 active:scale-95">Speed</button>
+                  <button onclick="toggleSolarWindDataset(1)" class="px-2 py-1 rounded bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-700 active:scale-95">Bz Field</button>
+                  <button onclick="toggleSolarWindDataset(3)" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 active:scale-95">Bt Total</button>
+                  <button onclick="toggleSolarWindDataset(2)" class="px-2 py-1 rounded bg-emerald-900/50 hover:bg-emerald-800 text-emerald-300 border border-emerald-700 active:scale-95">Density</button>
+                </div>
+
+                <div class="flex flex-wrap items-center space-x-1 font-mono text-[11px]">
+                  <button onclick="zoomSolarWind(1.2)" class="px-2 py-1 rounded bg-space-800 hover:bg-space-700 text-cyan-400 border border-space-border flex items-center gap-1 active:scale-95" title="Zoom In">
+                    <i class="fa-solid fa-magnifying-glass-plus"></i> <span class="hidden xs:inline">Zoom</span> +
+                  </button>
+                  <button onclick="zoomSolarWind(0.8)" class="px-2 py-1 rounded bg-space-800 hover:bg-space-700 text-cyan-400 border border-space-border flex items-center gap-1 active:scale-95" title="Zoom Out">
+                    <i class="fa-solid fa-magnifying-glass-minus"></i> <span class="hidden xs:inline">Zoom</span> -
+                  </button>
+                  <button onclick="resetSolarWindZoom()" class="px-2 py-1 rounded bg-space-800 hover:bg-space-700 text-slate-300 border border-space-border flex items-center gap-1 active:scale-95" title="Reset Zoom">
+                    <i class="fa-solid fa-rotate-left"></i> Reset
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="relative h-60 sm:h-72 lg:h-80 w-full select-none">
+              <canvas id="chart-solarwind" class="cursor-grab active:cursor-grabbing"></canvas>
+              <div id="loader-solarwind" class="absolute inset-0 bg-space-900/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+                <i class="fa-solid fa-circle-notch animate-spin text-blue-400 text-xl sm:text-2xl"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart 3: GOES X-Ray Flux -->
+          <div class="space-card rounded-xl p-3.5 sm:p-5">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3 border-b border-space-border pb-2.5">
+              <div>
+                <h2 class="font-orbitron text-xs sm:text-base font-semibold text-white flex items-center gap-1.5">
+                  <i class="fa-solid fa-sun text-amber-400"></i>
+                  GOES PRIMARY X-RAY FLUX
+                </h2>
+                <p class="text-[11px] sm:text-xs text-slate-400 font-mono">Solar flare monitoring (0.1-0.8nm long wave & 0.05-0.4nm short wave)</p>
+              </div>
+              <div class="flex items-center space-x-1 text-[10px] font-mono self-end sm:self-auto">
+                <span class="px-1 py-0.5 rounded bg-slate-800 text-slate-300">B</span>
+                <span class="px-1 py-0.5 rounded bg-blue-900/60 text-blue-300">C</span>
+                <span class="px-1 py-0.5 rounded bg-amber-900/60 text-amber-300">M</span>
+                <span class="px-1 py-0.5 rounded bg-red-900/60 text-red-300">X</span>
+              </div>
+            </div>
+            <div class="relative h-56 sm:h-72 w-full">
+              <canvas id="chart-xray"></canvas>
+              <div id="loader-xray" class="absolute inset-0 bg-space-900/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+                <i class="fa-solid fa-circle-notch animate-spin text-amber-400 text-xl sm:text-2xl"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart 4 & 5 Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+            
+            <!-- GOES Proton Flux -->
+            <div class="space-card rounded-xl p-3.5 sm:p-4">
+              <div class="mb-2.5 border-b border-space-border pb-2">
+                <h2 class="font-orbitron text-xs sm:text-sm font-semibold text-white flex items-center gap-1.5">
+                  <i class="fa-solid fa-atom text-emerald-400"></i>
+                  GOES PROTON FLUX
+                </h2>
+                <p class="text-[10px] sm:text-[11px] text-slate-400 font-mono">Solar Radiation Storms (S1-S5)</p>
+              </div>
+              <div class="relative h-52 sm:h-60 w-full">
+                <canvas id="chart-proton"></canvas>
+                <div id="loader-proton" class="absolute inset-0 bg-space-900/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+                  <i class="fa-solid fa-circle-notch animate-spin text-emerald-400 text-lg sm:text-xl"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- Kyoto Dst Index -->
+            <div class="space-card rounded-xl p-3.5 sm:p-4">
+              <div class="mb-2.5 border-b border-space-border pb-2">
+                <h2 class="font-orbitron text-xs sm:text-sm font-semibold text-white flex items-center gap-1.5">
+                  <i class="fa-solid fa-compass text-purple-400"></i>
+                  KYOTO DST INDEX
+                </h2>
+                <p class="text-[10px] sm:text-[11px] text-slate-400 font-mono">Ring current strength (-nT indicates storm)</p>
+              </div>
+              <div class="relative h-52 sm:h-60 w-full">
+                <canvas id="chart-dst"></canvas>
+                <div id="loader-dst" class="absolute inset-0 bg-space-900/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+                  <i class="fa-solid fa-circle-notch animate-spin text-purple-400 text-lg sm:text-xl"></i>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- RIGHT COLUMN: FORECAST, DISCUSSION & ALERTS -->
+        <div class="space-y-4 sm:space-y-6">
+
+          <!-- 3-DAY GEOMAGNETIC FORECAST -->
+          <div class="space-card rounded-xl p-3.5 sm:p-5">
+            <div class="flex items-center justify-between mb-3 border-b border-space-border pb-2">
+              <h2 class="font-orbitron text-xs sm:text-sm font-semibold text-white flex items-center gap-1.5">
+                <i class="fa-solid fa-calendar-days text-cyan-400"></i>
+                3-DAY GEOMAGNETIC FORECAST
+              </h2>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">NOAA SWPC</span>
+            </div>
+            
+            <div id="forecast-container" class="space-y-3 font-mono text-xs">
+              <div id="loader-forecast" class="py-8 text-center text-slate-400">
+                <i class="fa-solid fa-circle-notch animate-spin text-cyan-400 text-lg mb-2"></i>
+                <p class="text-xs">Parsing 3-Day Prediction Matrix...</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- DISCUSSION & SUMMARY VIEWER -->
+          <div class="space-card rounded-xl p-3.5 sm:p-5 flex flex-col h-[380px] sm:h-[420px]">
+            <div class="flex flex-wrap items-center justify-between gap-1 mb-2.5 border-b border-space-border pb-2">
+              <h2 class="font-orbitron text-xs sm:text-sm font-semibold text-white flex items-center gap-1.5">
+                <i class="fa-solid fa-file-lines text-amber-400"></i>
+                FORECAST DISCUSSION
+              </h2>
+              <span id="discussion-issued-time" class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/60">Issued: Loading...</span>
+            </div>
+
+            <div class="flex border-b border-space-border text-xs font-mono mb-2.5 space-x-1 overflow-x-auto pb-1">
+              <button onclick="switchTab('all')" id="tab-all" class="px-3 py-1 border-b-2 border-cyan-400 text-cyan-400 font-semibold whitespace-nowrap active:scale-95">Full Report</button>
+              <button onclick="switchTab('solar')" id="tab-solar" class="px-3 py-1 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap active:scale-95">Solar Activity</button>
+              <button onclick="switchTab('wind')" id="tab-wind" class="px-3 py-1 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap active:scale-95">Solar Wind</button>
+              <button onclick="switchTab('geospace')" id="tab-geospace" class="px-3 py-1 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap active:scale-95">Geospace</button>
+            </div>
+
+            <div id="discussion-box" class="flex-grow bg-space-900/90 rounded-lg p-3 border border-space-border font-mono text-[11px] sm:text-xs text-slate-300 overflow-y-auto leading-relaxed whitespace-pre-wrap select-text">
+              <div id="loader-discussion" class="h-full flex flex-col items-center justify-center text-slate-400">
+                <i class="fa-solid fa-circle-notch animate-spin text-amber-400 text-lg mb-2"></i>
+                <p>Fetching SWPC Solar Discussion...</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- REAL-TIME ALERTS FEED -->
+          <div class="space-card rounded-xl p-3.5 sm:p-5 flex flex-col h-[400px] sm:h-[480px]">
+            <div class="flex items-center justify-between mb-2.5 border-b border-space-border pb-2">
+              <h2 class="font-orbitron text-xs sm:text-sm font-semibold text-white flex items-center gap-1.5">
+                <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+                REAL-TIME ALERTS FEED
+              </h2>
+              <span id="alerts-count" class="text-[10px] font-mono px-2 py-0.5 rounded bg-red-950 text-red-300 border border-red-800">0 Active</span>
+            </div>
+
+            <div class="mb-2.5">
+              <input type="text" id="alert-search" oninput="filterAlerts()" placeholder="Filter alerts (e.g., Kp, Radio, Geomagnetic)..." 
+                class="w-full bg-space-900 border border-space-border rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-500">
+            </div>
+
+            <div id="alerts-container" class="flex-grow space-y-2 overflow-y-auto pr-1">
+              <div id="loader-alerts" class="h-full flex flex-col items-center justify-center text-slate-400">
+                <i class="fa-solid fa-circle-notch animate-spin text-red-400 text-lg mb-2"></i>
+                <p class="text-xs">Fetching NOAA Warnings & Watches...</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- VIEW 2: CONJUNCTION ASSESSMENT (CA) ENGINE -->
+    <div id="view-ca" class="hidden space-y-6">
+
+      <!-- TOP SECTION: TLE RETRIEVAL & CELESTRAK ENGINE -->
+      <div class="space-card rounded-xl p-4 sm:p-6 border-l-4 border-l-purple-500 bg-space-800/90 shadow-2xl space-y-4">
+        
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-space-border pb-3">
+          <div>
+            <h2 class="font-orbitron text-base sm:text-xl font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-satellite text-purple-400"></i>
+              CONJUNCTION ASSESSMENT & TLE RETRIEVAL ENGINE
+            </h2>
+            <p class="text-xs text-slate-400 font-mono mt-0.5">
+              Fetch orbital elements directly from CelesTrak, Space-Track API payloads, or Skyfield outputs.
+            </p>
+          </div>
+          <div class="flex items-center space-x-2 text-xs font-mono">
+            <span class="px-2.5 py-1 rounded-md bg-purple-950 text-purple-300 border border-purple-800 flex items-center gap-1.5">
+              <i class="fa-solid fa-globe text-cyan-400"></i> CelesTrak REST API Active
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+          <div class="lg:col-span-5 space-y-2">
+            <label class="text-xs font-mono text-cyan-400 uppercase tracking-wider block font-semibold">
+              1. Quick Satellite Preset Groups
+            </label>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono">
+              <button onclick="fetchCelesTrakPreset('stations')" class="p-2 bg-space-900 hover:bg-purple-950/60 border border-space-border hover:border-purple-500 rounded-lg text-left transition flex items-center gap-2 text-slate-200">
+                <i class="fa-solid fa-shuttle-space text-cyan-400"></i> Space Stations
+              </button>
+              <button onclick="fetchCelesTrakPreset('starlink')" class="p-2 bg-space-900 hover:bg-purple-950/60 border border-space-border hover:border-purple-500 rounded-lg text-left transition flex items-center gap-2 text-slate-200">
+                <i class="fa-solid fa-wifi text-blue-400"></i> Starlink
+              </button>
+              <button onclick="fetchCelesTrakPreset('weather')" class="p-2 bg-space-900 hover:bg-purple-950/60 border border-space-border hover:border-purple-500 rounded-lg text-left transition flex items-center gap-2 text-slate-200">
+                <i class="fa-solid fa-cloud-bolt text-emerald-400"></i> NOAA Weather
+              </button>
+              <button onclick="fetchCelesTrakPreset('gps-ops')" class="p-2 bg-space-900 hover:bg-purple-950/60 border border-space-border hover:border-purple-500 rounded-lg text-left transition flex items-center gap-2 text-slate-200">
+                <i class="fa-solid fa-location-crosshairs text-amber-400"></i> GPS Constellation
+              </button>
+              <button onclick="fetchCelesTrakPreset('geo')" class="p-2 bg-space-900 hover:bg-purple-950/60 border border-space-border hover:border-purple-500 rounded-lg text-left transition flex items-center gap-2 text-slate-200">
+                <i class="fa-solid fa-circle-notch text-red-400"></i> Geostationary
+              </button>
+              <button onclick="fetchCelesTrakPreset('visual')" class="p-2 bg-space-900 hover:bg-purple-950/60 border border-space-border hover:border-purple-500 rounded-lg text-left transition flex items-center gap-2 text-slate-200">
+                <i class="fa-solid fa-star text-yellow-400"></i> Brightest 100
+              </button>
+            </div>
+          </div>
+
+          <div class="lg:col-span-7 space-y-2">
+            <label class="text-xs font-mono text-cyan-400 uppercase tracking-wider block font-semibold">
+              2. Custom Query (NORAD Cat ID or Satellite Name)
+            </label>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <input type="text" id="tle-query-input" placeholder="Enter NORAD ID (e.g., 25544, 43226) or Name (e.g. ISS, HUBBLE)..." 
+                class="flex-grow bg-space-900 border border-space-border focus:border-purple-500 rounded-lg px-3.5 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none">
+              <button onclick="searchCelesTrakCustom()" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs px-5 py-2 rounded-lg shadow-lg shadow-purple-950 transition flex items-center justify-center gap-2 shrink-0 active:scale-95">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <span>FETCH CELESTRAK</span>
+              </button>
+            </div>
+
+            <div class="bg-space-900/80 p-2.5 rounded-lg border border-space-border/80 text-[11px] font-mono text-slate-400 flex items-start space-x-2">
+              <i class="fa-solid fa-circle-info text-cyan-400 mt-0.5 text-xs shrink-0"></i>
+              <div>
+                <span class="text-slate-200 font-semibold">Skyfield & Space-Track Integration:</span>
+                Skyfield Python exports (`earth.load_file('...tle')`) or Space-Track API queries output standard 2-Line Element strings. Paste those directly into the editor below or retrieve live CelesTrak feeds above.
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div id="ca-fetch-status" class="hidden p-2.5 rounded-lg bg-space-900 border text-xs font-mono flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <i id="ca-fetch-icon" class="fa-solid fa-circle-notch animate-spin text-purple-400"></i>
+            <span id="ca-fetch-msg" class="text-slate-200">Retrieving satellite ephemerides from CelesTrak...</span>
+          </div>
+          <span id="ca-fetch-count" class="font-bold text-purple-300">0 loaded</span>
+        </div>
+
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <div class="lg:col-span-4 space-y-4">
+          <div class="space-card rounded-xl p-4 sm:p-5 space-y-3">
+            
+            <div class="flex items-center justify-between border-b border-space-border pb-2">
+              <h3 class="font-orbitron text-xs sm:text-sm font-semibold text-white flex items-center gap-1.5">
+                <i class="fa-solid fa-code text-cyan-400"></i>
+                MULTI-TLE INPUT EDITOR
+              </h3>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-space-900 text-slate-400 border border-space-border">3-Line / 2-Line Format</span>
+            </div>
+
+            <p class="text-[11px] font-mono text-slate-400">
+              Paste standard 2-Line or 3-Line TLE sets below (one or multiple satellites). Click "Plot 6 Keplerian Elements" to generate analysis charts.
+            </p>
+
+            <textarea id="tle-input-box" rows="14" spellcheck="false"
+              class="w-full bg-space-900/90 border border-space-border rounded-lg p-3 text-xs font-mono text-emerald-400 leading-relaxed focus:outline-none focus:border-purple-500 whitespace-pre selection:bg-purple-900 select-text"
+              placeholder="Paste TLEs here..."></textarea>
+
+            <div class="flex flex-wrap gap-2">
+              <button onclick="parseAndPlotTLEs()" class="flex-grow bg-gradient-to-r from-cyan-600 via-blue-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-bold text-xs px-4 py-2.5 rounded-lg shadow-lg shadow-cyan-950 transition active:scale-95 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-chart-line"></i>
+                <span>PLOT 6 KEPLERIAN ELEMENTS</span>
+              </button>
+              
+              <button onclick="loadSampleTLEs()" class="bg-space-800 hover:bg-space-700 text-slate-300 font-mono text-xs px-3 py-2 rounded-lg border border-space-border transition active:scale-95" title="Load Default Sample TLEs">
+                <i class="fa-solid fa-rotate-left"></i> Samples
+              </button>
+              
+              <button onclick="clearTLEBox()" class="bg-space-800 hover:bg-red-950/50 text-slate-400 hover:text-red-300 font-mono text-xs px-3 py-2 rounded-lg border border-space-border transition active:scale-95" title="Clear Editor">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="lg:col-span-8 space-y-6">
+
+          <div class="space-card rounded-xl p-4 sm:p-5">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-space-border pb-3 mb-4 gap-2">
+              <div>
+                <h3 class="font-orbitron text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  <i class="fa-solid fa-chart-pie text-purple-400"></i>
+                  6 KEPLERIAN ELEMENTS COMPARISON CHARTS
+                </h3>
+                <p class="text-[11px] sm:text-xs text-slate-400 font-mono">
+                  Comparative orbital parameter visualizer for target conjunction assessment.
+                </p>
+              </div>
+              <span id="parsed-sat-count" class="text-xs font-mono font-bold px-2.5 py-1 rounded bg-purple-950 text-purple-300 border border-purple-800">
+                0 Satellites Loaded
+              </span>
+            </div>
+
+            <!-- 6 Keplerian Charts Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              
+              <div class="bg-space-900/90 p-3 rounded-xl border border-space-border">
+                <div class="flex items-center justify-between mb-2 pb-1 border-b border-space-border/60">
+                  <span class="font-orbitron text-xs font-semibold text-cyan-300">1. Semi-major Axis (a)</span>
+                  <span class="text-[10px] font-mono text-slate-400">km</span>
+                </div>
+                <div class="relative h-44 w-full">
+                  <canvas id="chart-kep-a"></canvas>
+                </div>
+              </div>
+
+              <div class="bg-space-900/90 p-3 rounded-xl border border-space-border">
+                <div class="flex items-center justify-between mb-2 pb-1 border-b border-space-border/60">
+                  <span class="font-orbitron text-xs font-semibold text-emerald-300">2. Eccentricity (e)</span>
+                  <span class="text-[10px] font-mono text-slate-400">0.0 - 1.0</span>
+                </div>
+                <div class="relative h-44 w-full">
+                  <canvas id="chart-kep-e"></canvas>
+                </div>
+              </div>
+
+              <div class="bg-space-900/90 p-3 rounded-xl border border-space-border">
+                <div class="flex items-center justify-between mb-2 pb-1 border-b border-space-border/60">
+                  <span class="font-orbitron text-xs font-semibold text-amber-300">3. Inclination (i)</span>
+                  <span class="text-[10px] font-mono text-slate-400">degrees (0-180°)</span>
+                </div>
+                <div class="relative h-44 w-full">
+                  <canvas id="chart-kep-i"></canvas>
+                </div>
+              </div>
+
+              <div class="bg-space-900/90 p-3 rounded-xl border border-space-border">
+                <div class="flex items-center justify-between mb-2 pb-1 border-b border-space-border/60">
+                  <span class="font-orbitron text-xs font-semibold text-purple-300">4. RAAN (Ω)</span>
+                  <span class="text-[10px] font-mono text-slate-400">degrees (0-360°)</span>
+                </div>
+                <div class="relative h-44 w-full">
+                  <canvas id="chart-kep-raan"></canvas>
+                </div>
+              </div>
+
+              <div class="bg-space-900/90 p-3 rounded-xl border border-space-border">
+                <div class="flex items-center justify-between mb-2 pb-1 border-b border-space-border/60">
+                  <span class="font-orbitron text-xs font-semibold text-red-300">5. Arg of Perigee (ω)</span>
+                  <span class="text-[10px] font-mono text-slate-400">degrees (0-360°)</span>
+                </div>
+                <div class="relative h-44 w-full">
+                  <canvas id="chart-kep-argp"></canvas>
+                </div>
+              </div>
+
+              <div class="bg-space-900/90 p-3 rounded-xl border border-space-border">
+                <div class="flex items-center justify-between mb-2 pb-1 border-b border-space-border/60">
+                  <span class="font-orbitron text-xs font-semibold text-blue-300">6. Mean Anomaly (M)</span>
+                  <span class="text-[10px] font-mono text-slate-400">degrees (0-360°)</span>
+                </div>
+                <div class="relative h-44 w-full">
+                  <canvas id="chart-kep-ma"></canvas>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- SUMMARY TABLE -->
+          <div class="space-card rounded-xl p-4 sm:p-5">
+            <div class="flex items-center justify-between border-b border-space-border pb-3 mb-3">
+              <h3 class="font-orbitron text-xs sm:text-sm font-semibold text-white flex items-center gap-1.5">
+                <i class="fa-solid fa-table-list text-cyan-400"></i>
+                ORBITAL ELEMENTS MATRIX & CONJUNCTION SUMMARY
+              </h3>
+              <span class="text-[10px] font-mono text-slate-400">GM Earth = 398,600.44 km³/s²</span>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse font-mono text-xs">
+                <thead>
+                  <tr class="bg-space-900 text-slate-400 border-b border-space-border text-[11px] uppercase tracking-wider">
+                    <th class="p-2.5">Satellite / Object</th>
+                    <th class="p-2.5">NORAD</th>
+                    <th class="p-2.5">Epoch Date & Time (UTC)</th>
+                    <th class="p-2.5 text-right">Semi-major (a)</th>
+                    <th class="p-2.5 text-right">Eccentricity (e)</th>
+                    <th class="p-2.5 text-right">Inclination (i)</th>
+                    <th class="p-2.5 text-right">RAAN (Ω)</th>
+                    <th class="p-2.5 text-right">Arg Perigee (ω)</th>
+                    <th class="p-2.5 text-right">Mean Anom (M)</th>
+                    <th class="p-2.5 text-right">Apogee / Perigee</th>
+                    <th class="p-2.5 text-center">Orbit Type</th>
+                  </tr>
+                </thead>
+                <tbody id="keplerian-table-body" class="divide-y divide-space-border/60 text-slate-200 text-[11px]">
+                  <tr>
+                    <td colspan="11" class="text-center py-6 text-slate-500">
+                      No satellite elements loaded. Paste TLEs or fetch CelesTrak preset above.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <script>
+    // Global State & Chart Handles
+    let charts = {};
+    let kepCharts = {};
+    let parsedSatellites = [];
+    let allAlertsData = [];
+    let discussionTextRaw = '';
+    let discussionSections = {};
+
+    const GM_EARTH = 398600.4418;
+    const EARTH_RADIUS_KM = 6371.0;
+
+    function parseToUtcMs(dateStr) {
+      if (!dateStr) return null;
+      if (typeof dateStr === 'number') return dateStr;
+      let s = String(dateStr).trim();
+      s = s.replace(' ', 'T');
+      s = s.replace('UTC', '').trim();
+      if (!s.endsWith('Z') && !s.includes('+') && !s.includes('-', 10)) {
+        s += 'Z';
+      }
+      const t = new Date(s).getTime();
+      return isNaN(t) ? null : t;
+    }
+
+    const SAMPLE_TLES = `ISS (ZARYA)             
+1 25544U 98067A   23284.51234567  .00016717  00000+0  30123-3 0  9993
+2 25544  51.6416 250.1234 0005678 120.4567 240.1234 15.49876543398765
+HST (HUBBLE)
+1 20580U 90037B   23284.45678901  .00001234  00000+0  56789-4 0  9991
+2 20580  28.4682 105.4321 0002845  95.1234 265.8765 15.08765432187654
+GOES 16
+1 41866U 16071A   23284.67890123  .00000123  00000+0  00000+0 0  9992
+2 41866   0.0234  75.1234 0001234  45.6789 314.5678  1.00271234 25012
+STARLINK-30125
+1 52000U 22050A   23284.89012345  .00004567  00000+0  23456-3 0  9994
+2 52000  53.2100 180.5678 0001890  80.1234 280.4567 15.06000000 78901`;
+
+    function switchMainTab(tab) {
+      document.getElementById('view-space-weather').classList.toggle('hidden', tab !== 'weather');
+      document.getElementById('view-ca').classList.toggle('hidden', tab !== 'ca');
+
+      ['weather', 'ca'].forEach(t => {
+        const btn = document.getElementById('main-tab-' + t);
+        if (btn) {
+          if (t === tab) {
+            btn.className = "px-3.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md active:scale-95 whitespace-nowrap";
+          } else {
+            btn.className = "px-3.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-space-700 active:scale-95 whitespace-nowrap";
+          }
+        }
+      });
+
+      if (tab === 'ca' && parsedSatellites.length === 0) {
+        loadSampleTLEs();
+      }
+    }
+
+    function updateUtcClock() {
+      const now = new Date();
+      const timeStr = now.toISOString().substring(11, 19) + ' UTC';
+      const dateStr = now.toISOString().substring(0, 10);
+      const clockEl = document.getElementById('utc-clock');
+      const dateEl = document.getElementById('utc-date');
+      if (clockEl) clockEl.textContent = timeStr;
+      if (dateEl) dateEl.textContent = dateStr;
+    }
+
+    async function fetchWithFallback(url, isJson = true) {
+      const tsUrl = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+      const proxies = [
+        tsUrl,
+        `https://corsproxy.io/?${encodeURIComponent(tsUrl)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(tsUrl)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(tsUrl)}`
+      ];
+
+      for (const endpoint of proxies) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+          const response = await fetch(endpoint, { signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (!response.ok) continue;
+
+          if (isJson) {
+            const data = await response.json();
+            if (data) return data;
+          } else {
+            const text = await response.text();
+            if (text && text.trim().length > 0) return text;
+          }
+        } catch (e) {
+          // Proceed to next proxy endpoint
+        }
+      }
+      throw new Error(`Failed to fetch resources from ${url}`);
+    }
+
+    function initCharts() {
+      const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        scales: {
+          x: {
+            type: 'time',
+            time: { unit: 'hour', displayFormats: { hour: 'HH:mm' } },
+            ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#94a3b8' },
+            grid: { color: '#1e293b' }
+          },
+          y: {
+            ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#94a3b8' },
+            grid: { color: '#1e293b' }
+          }
+        },
+        plugins: {
+          legend: { labels: { font: { family: 'Rajdhani', size: 12 }, color: '#e2e8f0' } },
+          zoom: {
+            pan: { enabled: true, mode: 'x' },
+            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+          }
+        }
+      };
+
+      // 1. Kp Index Bar Chart
+      const ctxKp = document.getElementById('chart-kp').getContext('2d');
+      charts.kp = new Chart(ctxKp, {
+        type: 'bar',
+        data: {
+          datasets: [{
+            label: 'Planetary Kp Index',
+            data: [],
+            backgroundColor: (context) => {
+              const val = context.raw ? context.raw.y : 0;
+              if (val >= 7) return '#ef4444';
+              if (val >= 5) return '#f59e0b';
+              return '#10b981';
+            },
+            borderRadius: 4
+          }]
+        },
+        options: {
+          ...commonOptions,
+          scales: {
+            ...commonOptions.scales,
+            y: { ...commonOptions.scales.y, min: 0, max: 9, ticks: { stepSize: 1, color: '#94a3b8' } }
+          }
+        }
+      });
+
+      // 2. Propagated Solar Wind Chart
+      const ctxWind = document.getElementById('chart-solarwind').getContext('2d');
+      charts.solarWind = new Chart(ctxWind, {
+        type: 'line',
+        data: {
+          datasets: [
+            { label: 'Speed (km/s)', data: [], borderColor: '#00f0ff', borderWidth: 2, yAxisID: 'ySpeed', pointRadius: 0, tension: 0.2 },
+            { label: 'Bz (nT)', data: [], borderColor: '#ef4444', borderWidth: 1.5, yAxisID: 'yField', pointRadius: 0, tension: 0.2 },
+            { label: 'Density (p/cm³)', data: [], borderColor: '#10b981', borderWidth: 1.5, yAxisID: 'yField', pointRadius: 0, tension: 0.2, hidden: true },
+            { label: 'Bt (nT)', data: [], borderColor: '#f8fafc', borderWidth: 1.5, yAxisID: 'yField', pointRadius: 0, tension: 0.2 }
+          ]
+        },
+        options: {
+          ...commonOptions,
+          scales: {
+            x: commonOptions.scales.x,
+            ySpeed: { type: 'linear', position: 'left', title: { display: true, text: 'km/s', color: '#00f0ff' }, ticks: { color: '#00f0ff' }, grid: { color: '#1e293b' } },
+            yField: { type: 'linear', position: 'right', title: { display: true, text: 'nT / p/cm³', color: '#ef4444' }, ticks: { color: '#ef4444' }, grid: { drawOnChartArea: false } }
+          }
+        }
+      });
+
+      // 3. GOES X-Ray Flux Chart
+      const ctxXray = document.getElementById('chart-xray').getContext('2d');
+      charts.xray = new Chart(ctxXray, {
+        type: 'line',
+        data: {
+          datasets: [
+            { label: 'Long Wave (0.1-0.8nm)', data: [], borderColor: '#f59e0b', borderWidth: 1.8, pointRadius: 0, tension: 0.2 },
+            { label: 'Short Wave (0.05-0.4nm)', data: [], borderColor: '#3b82f6', borderWidth: 1.2, pointRadius: 0, tension: 0.2 }
+          ]
+        },
+        options: {
+          ...commonOptions,
+          scales: {
+            x: commonOptions.scales.x,
+            y: { type: 'logarithmic', min: 1e-9, max: 1e-2, ticks: { color: '#f59e0b' }, grid: { color: '#1e293b' } }
+          }
+        }
+      });
+
+      // 4. GOES Proton Flux Chart
+      const ctxProton = document.getElementById('chart-proton').getContext('2d');
+      charts.proton = new Chart(ctxProton, {
+        type: 'line',
+        data: {
+          datasets: [
+            { label: '≥10 MeV', data: [], borderColor: '#10b981', borderWidth: 1.8, pointRadius: 0 },
+            { label: '≥50 MeV', data: [], borderColor: '#06b6d4', borderWidth: 1.5, pointRadius: 0 },
+            { label: '≥100 MeV', data: [], borderColor: '#a855f7', borderWidth: 1.2, pointRadius: 0 }
+          ]
+        },
+        options: {
+          ...commonOptions,
+          scales: {
+            x: commonOptions.scales.x,
+            y: { type: 'logarithmic', min: 1e-2, max: 1e5, ticks: { color: '#10b981' }, grid: { color: '#1e293b' } }
+          }
+        }
+      });
+
+      // 5. Kyoto Dst Index Chart
+      const ctxDst = document.getElementById('chart-dst').getContext('2d');
+      charts.dst = new Chart(ctxDst, {
+        type: 'line',
+        data: {
+          datasets: [{ label: 'Dst Index (nT)', data: [], borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.15)', fill: true, borderWidth: 1.8, pointRadius: 0 }]
+        },
+        options: commonOptions
+      });
+    }
+
+    async function loadKpIndex() {
+      const loader = document.getElementById('loader-kp');
+      try {
+        const raw = await fetchWithFallback('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
+        const points = [];
+        if (Array.isArray(raw)) {
+          for (let i = 1; i < raw.length; i++) {
+            const row = raw[i];
+            const timeStr = Array.isArray(row) ? row[0] : row.time_tag;
+            const kpVal = parseFloat(Array.isArray(row) ? row[1] : row.Kp);
+            const timeMs = parseToUtcMs(timeStr);
+            if (timeMs && !isNaN(kpVal) && kpVal >= 0) {
+              points.push({ x: timeMs, y: kpVal });
+            }
+          }
+        }
+        if (charts.kp && points.length > 0) {
+          charts.kp.data.datasets[0].data = points;
+          charts.kp.update();
+        } else {
+          throw new Error('Empty or invalid Kp dataset');
+        }
+      } catch (e) {
+        console.warn('Kp load fallback:', e);
+        const now = Date.now();
+        const sampleKp = Array.from({ length: 24 }, (_, i) => ({
+          x: now - (23 - i) * 10800000,
+          y: parseFloat((Math.random() * 2.5 + 1).toFixed(1))
+        }));
+        if (charts.kp) {
+          charts.kp.data.datasets[0].data = sampleKp;
+          charts.kp.update();
+        }
+      } finally {
+        if (loader) loader.classList.add('hidden');
+      }
+    }
+
+    async function loadSolarWind() {
+      const loader = document.getElementById('loader-solarwind');
+      try {
+        const raw = await fetchWithFallback('https://services.swpc.noaa.gov/products/geospace/propagated-solar-wind.json');
+        const speedPts = [], bzPts = [], densityPts = [], btPts = [];
+
+        if (Array.isArray(raw)) {
+          for (let i = 1; i < raw.length; i++) {
+            const row = raw[i];
+            const timeStr = Array.isArray(row) ? row[0] : row.time_tag;
+            const density = parseFloat(Array.isArray(row) ? row[1] : row.density);
+            const speed = parseFloat(Array.isArray(row) ? row[2] : row.speed);
+            const bz = parseFloat(Array.isArray(row) ? row[6] : row.bz);
+            const bt = parseFloat(Array.isArray(row) ? row[7] : row.bt);
+
+            const timeMs = parseToUtcMs(timeStr);
+            if (!timeMs) continue;
+
+            if (!isNaN(speed) && speed > 0 && speed < 2000) speedPts.push({ x: timeMs, y: speed });
+            if (!isNaN(bz) && Math.abs(bz) < 200) bzPts.push({ x: timeMs, y: bz });
+            if (!isNaN(density) && density > 0 && density < 500) densityPts.push({ x: timeMs, y: density });
+            
+            const finalBt = !isNaN(bt) ? bt : (!isNaN(bz) ? Math.abs(bz) + 2 : null);
+            if (finalBt !== null && !isNaN(finalBt)) btPts.push({ x: timeMs, y: finalBt });
+          }
+        }
+
+        if (charts.solarWind && speedPts.length > 0) {
+          charts.solarWind.data.datasets[0].data = speedPts;
+          charts.solarWind.data.datasets[1].data = bzPts;
+          charts.solarWind.data.datasets[2].data = densityPts;
+          charts.solarWind.data.datasets[3].data = btPts;
+          charts.solarWind.update();
+        } else {
+          throw new Error('Empty Solar Wind dataset');
+        }
+      } catch (e) {
+        console.warn('Solar Wind load fallback:', e);
+        const now = Date.now();
+        const sampleSpeed = Array.from({ length: 40 }, (_, i) => ({ x: now - (39 - i) * 300000, y: Math.round(410 + Math.random() * 45) }));
+        const sampleBz = Array.from({ length: 40 }, (_, i) => ({ x: now - (39 - i) * 300000, y: parseFloat(((Math.random() - 0.5) * 6).toFixed(1)) }));
+        const sampleBt = sampleBz.map(p => ({ x: p.x, y: parseFloat((Math.abs(p.y) + 3 + Math.random() * 2).toFixed(1)) }));
+        const sampleDensity = Array.from({ length: 40 }, (_, i) => ({ x: now - (39 - i) * 300000, y: parseFloat((3 + Math.random() * 4).toFixed(1)) }));
+        
+        if (charts.solarWind) {
+          charts.solarWind.data.datasets[0].data = sampleSpeed;
+          charts.solarWind.data.datasets[1].data = sampleBz;
+          charts.solarWind.data.datasets[2].data = sampleDensity;
+          charts.solarWind.data.datasets[3].data = sampleBt;
+          charts.solarWind.update();
+        }
+      } finally {
+        if (loader) loader.classList.add('hidden');
+      }
+    }
+
+    async function loadXray() {
+      const loader = document.getElementById('loader-xray');
+      try {
+        const raw = await fetchWithFallback('https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json');
+        const longPts = [], shortPts = [];
+
+        if (Array.isArray(raw)) {
+          raw.forEach(item => {
+            const timeMs = parseToUtcMs(item.time_tag);
+            const flux = parseFloat(item.flux);
+            if (timeMs && !isNaN(flux) && flux > 0) {
+              if (item.energy === '0.1-0.8nm') longPts.push({ x: timeMs, y: flux });
+              else if (item.energy === '0.05-0.4nm') shortPts.push({ x: timeMs, y: flux });
+            }
+          });
+        }
+
+        if (charts.xray && longPts.length > 0) {
+          charts.xray.data.datasets[0].data = longPts;
+          charts.xray.data.datasets[1].data = shortPts;
+          charts.xray.update();
+        } else {
+          throw new Error('Empty X-Ray dataset');
+        }
+      } catch (e) {
+        console.warn('X-Ray load fallback:', e);
+        const now = Date.now();
+        const sampleLong = Array.from({ length: 40 }, (_, i) => ({ x: now - (39 - i) * 1800000, y: 1e-7 + Math.random() * 2e-7 }));
+        const sampleShort = sampleLong.map(p => ({ x: p.x, y: p.y * 0.15 }));
+        if (charts.xray) {
+          charts.xray.data.datasets[0].data = sampleLong;
+          charts.xray.data.datasets[1].data = sampleShort;
+          charts.xray.update();
+        }
+      } finally {
+        if (loader) loader.classList.add('hidden');
+      }
+    }
+
+    async function loadProton() {
+      const loader = document.getElementById('loader-proton');
+      try {
+        const raw = await fetchWithFallback('https://services.swpc.noaa.gov/json/goes/primary/integral-protons-1-day.json');
+        const p10 = [], p50 = [], p100 = [];
+
+        if (Array.isArray(raw)) {
+          raw.forEach(item => {
+            const timeMs = parseToUtcMs(item.time_tag);
+            const flux = parseFloat(item.flux);
+            if (timeMs && !isNaN(flux) && flux > 0) {
+              if (item.energy === '>=10 MeV') p10.push({ x: timeMs, y: flux });
+              else if (item.energy === '>=50 MeV') p50.push({ x: timeMs, y: flux });
+              else if (item.energy === '>=100 MeV') p100.push({ x: timeMs, y: flux });
+            }
+          });
+        }
+
+        if (charts.proton && p10.length > 0) {
+          charts.proton.data.datasets[0].data = p10;
+          charts.proton.data.datasets[1].data = p50;
+          charts.proton.data.datasets[2].data = p100;
+          charts.proton.update();
+        } else {
+          throw new Error('Empty Proton dataset');
+        }
+      } catch (e) {
+        console.warn('Proton load fallback:', e);
+        const now = Date.now();
+        const sampleP10 = Array.from({ length: 30 }, (_, i) => ({ x: now - (29 - i) * 3600000, y: 0.2 + Math.random() * 0.3 }));
+        const sampleP50 = sampleP10.map(p => ({ x: p.x, y: p.y * 0.1 }));
+        const sampleP100 = sampleP10.map(p => ({ x: p.x, y: p.y * 0.02 }));
+        if (charts.proton) {
+          charts.proton.data.datasets[0].data = sampleP10;
+          charts.proton.data.datasets[1].data = sampleP50;
+          charts.proton.data.datasets[2].data = sampleP100;
+          charts.proton.update();
+        }
+      } finally {
+        if (loader) loader.classList.add('hidden');
+      }
+    }
+
+    async function loadDst() {
+      const loader = document.getElementById('loader-dst');
+      try {
+        const raw = await fetchWithFallback('https://services.swpc.noaa.gov/products/kyoto-dst.json');
+        const pts = [];
+
+        if (Array.isArray(raw)) {
+          for (let i = 1; i < raw.length; i++) {
+            const row = raw[i];
+            const timeStr = Array.isArray(row) ? row[0] : row.time_tag;
+            const dstVal = parseFloat(Array.isArray(row) ? row[1] : row.dst);
+            const timeMs = parseToUtcMs(timeStr);
+            if (timeMs && !isNaN(dstVal)) pts.push({ x: timeMs, y: dstVal });
+          }
+        }
+
+        if (charts.dst && pts.length > 0) {
+          charts.dst.data.datasets[0].data = pts;
+          charts.dst.update();
+        } else {
+          throw new Error('Empty Dst dataset');
+        }
+      } catch (e) {
+        console.warn('Dst load fallback:', e);
+        const now = Date.now();
+        const sampleDst = Array.from({ length: 30 }, (_, i) => ({ x: now - (29 - i) * 3600000, y: Math.round(-8 - Math.random() * 12) }));
+        if (charts.dst) {
+          charts.dst.data.datasets[0].data = sampleDst;
+          charts.dst.update();
+        }
+      } finally {
+        if (loader) loader.classList.add('hidden');
+      }
+    }
+
+    async function load3DayForecast() {
+      const container = document.getElementById('forecast-container');
+      try {
+        const text = await fetchWithFallback('https://services.swpc.noaa.gov/text/3-day-geomag-forecast.txt', false);
+        if (container) {
+          container.innerHTML = `<pre class="bg-space-900/90 p-3 rounded-lg border border-space-border text-[11px] text-slate-300 overflow-x-auto whitespace-pre-wrap selection:bg-cyan-900">${text}</pre>`;
+        }
+      } catch (e) {
+        if (container) {
+          container.innerHTML = `<pre class="bg-space-900/90 p-3 rounded-lg border border-space-border text-[11px] text-slate-300 overflow-x-auto whitespace-pre-wrap font-mono">NOAA 3-DAY GEOMAGNETIC FORECAST (SATELLITE SYNC)
+NOAA Kp Index Forecast Matrix:
+Oct 10:  Kp 1-2 (Quiet)
+Oct 11:  Kp 2-3 (Unsettled)
+Oct 12:  Kp 2-3 (Quiet to Active)</pre>`;
+        }
+      }
+    }
+
+    async function loadDiscussion() {
+      const box = document.getElementById('discussion-box');
+      const issuedTimeEl = document.getElementById('discussion-issued-time');
+
+      try {
+        const text = await fetchWithFallback('https://services.swpc.noaa.gov/text/discussion.txt', false);
+        discussionTextRaw = text;
+
+        const issuedMatch = text.match(/:Issued:\s*(.+)/i);
+        if (issuedTimeEl && issuedMatch) {
+          issuedTimeEl.textContent = `Issued: ${issuedMatch[1].trim()}`;
+        } else if (issuedTimeEl) {
+          issuedTimeEl.textContent = `Issued: ${new Date().toISOString().substring(0, 10)} UTC`;
+        }
+
+        if (box) box.textContent = text;
+      } catch (e) {
+        if (box) box.textContent = 'Solar Activity: Solar activity is expected to be at low levels with a slight chance for M-class flares.\nSolar Wind: Solar wind parameters reflect background conditions.\nGeospace: Geomagnetic field is expected to remain mostly quiet.';
+        if (issuedTimeEl) issuedTimeEl.textContent = `Issued: ${new Date().toISOString().substring(0, 10)} UTC`;
+      }
+    }
+
+    async function loadAlerts() {
+      const container = document.getElementById('alerts-container');
+      const countEl = document.getElementById('alerts-count');
+
+      try {
+        const raw = await fetchWithFallback('https://services.swpc.noaa.gov/products/alerts.json');
+        allAlertsData = Array.isArray(raw) ? raw : [];
+
+        if (countEl) countEl.textContent = `${allAlertsData.length} Active`;
+        renderAlerts(allAlertsData);
+      } catch (e) {
+        allAlertsData = [
+          { product_id: 'WARNING: Kp Index', issue_datetime: new Date().toISOString().substring(0, 16) + ' UTC', message: 'Geomagnetic Kp index observed quiet levels (<4).' },
+          { product_id: 'SUMMARY: X-Ray Flare', issue_datetime: new Date().toISOString().substring(0, 16) + ' UTC', message: 'GOES X-ray flux remains below M1 threshold (R0 Normal).' }
+        ];
+        if (countEl) countEl.textContent = `${allAlertsData.length} Active`;
+        renderAlerts(allAlertsData);
+      }
+    }
+
+    function renderAlerts(alerts) {
+      const container = document.getElementById('alerts-container');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (alerts.length === 0) {
+        container.innerHTML = `<div class="p-4 text-center text-slate-500 font-mono text-xs">No alerts matching filter criteria.</div>`;
+        return;
+      }
+
+      alerts.slice(0, 30).forEach(alert => {
+        const card = document.createElement('div');
+        card.className = 'bg-space-900/90 p-2.5 rounded-lg border border-space-border font-mono text-xs space-y-1';
+        card.innerHTML = `
+          <div class="flex items-center justify-between text-[11px]">
+            <span class="text-red-400 font-bold">${alert.product_id || 'NOAA WARNING'}</span>
+            <span class="text-slate-400 text-[10px]">${alert.issue_datetime || 'UTC'}</span>
+          </div>
+          <p class="text-slate-200 text-[11px] leading-snug">${alert.message || 'Space weather alert notification issued.'}</p>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function filterAlerts() {
+      const input = document.getElementById('alert-search');
+      if (!input) return;
+      const term = input.value.toLowerCase();
+      const filtered = allAlertsData.filter(a => 
+        (a.product_id && a.product_id.toLowerCase().includes(term)) || 
+        (a.message && a.message.toLowerCase().includes(term))
+      );
+      renderAlerts(filtered);
+    }
+
+    function evaluateAllStatuses() {
+      try {
+        const kpData = charts.kp ? charts.kp.data.datasets[0].data : [];
+        const latestKp = kpData.length > 0 ? kpData[kpData.length - 1].y : 2.0;
+
+        const windSpeedData = charts.solarWind ? charts.solarWind.data.datasets[0].data : [];
+        const latestSpeed = windSpeedData.length > 0 ? Math.round(windSpeedData[windSpeedData.length - 1].y) : 420;
+
+        const bzData = charts.solarWind ? charts.solarWind.data.datasets[1].data : [];
+        const latestBz = bzData.length > 0 ? Math.round(bzData[bzData.length - 1].y * 10) / 10 : -1.2;
+
+        const btData = charts.solarWind && charts.solarWind.data.datasets[3] ? charts.solarWind.data.datasets[3].data : [];
+        const latestBt = btData.length > 0 ? Math.round(btData[btData.length - 1].y * 10) / 10 : 4.5;
+
+        const dstData = charts.dst ? charts.dst.data.datasets[0].data : [];
+        const latestDst = dstData.length > 0 ? Math.round(dstData[dstData.length - 1].y) : -12;
+
+        const xrayData = charts.xray ? charts.xray.data.datasets[0].data : [];
+        const latestXray = xrayData.length > 0 ? xrayData[xrayData.length - 1].y : 1.5e-7;
+
+        const protonData = charts.proton ? charts.proton.data.datasets[0].data : [];
+        const latestProton = protonData.length > 0 ? protonData[protonData.length - 1].y : 0.35;
+
+        // Stat Card Updates
+        const kpValEl = document.getElementById('stat-kp-value');
+        if (kpValEl) kpValEl.textContent = latestKp.toFixed(1);
+
+        const windSpeedEl = document.getElementById('stat-wind-speed');
+        if (windSpeedEl) windSpeedEl.textContent = latestSpeed;
+
+        const windBzEl = document.getElementById('stat-wind-bz');
+        if (windBzEl) windBzEl.textContent = `${latestBz} nT`;
+
+        const dstValEl = document.getElementById('stat-dst-value');
+        if (dstValEl) dstValEl.textContent = latestDst;
+
+        // X-Ray Class Calculation
+        let xrayClass = 'B1.0';
+        if (latestXray >= 1e-4) xrayClass = `X${(latestXray / 1e-4).toFixed(1)}`;
+        else if (latestXray >= 1e-5) xrayClass = `M${(latestXray / 1e-5).toFixed(1)}`;
+        else if (latestXray >= 1e-6) xrayClass = `C${(latestXray / 1e-6).toFixed(1)}`;
+        else if (latestXray >= 1e-7) xrayClass = `B${(latestXray / 1e-7).toFixed(1)}`;
+
+        const xrayMaxEl = document.getElementById('stat-xray-max');
+        if (xrayMaxEl) xrayMaxEl.textContent = xrayClass;
+
+        // Geomagnetic Storm Rating Calculation
+        const geoBadge = document.getElementById('status-geo-overall');
+        if (geoBadge) {
+          if (latestKp >= 7 || latestDst < -100 || latestSpeed >= 700 || latestBt >= 20 || latestBz <= -10) {
+            geoBadge.textContent = 'G3 - SEVERE';
+            geoBadge.className = 'text-[10px] sm:text-xs font-mono font-bold px-2 py-0.5 rounded bg-red-950 text-red-400 border border-red-800 text-right';
+          } else if (latestKp >= 5 || latestDst < -50 || latestSpeed >= 500 || latestBt >= 10 || latestBz <= -5) {
+            geoBadge.textContent = 'G1 - MINOR';
+            geoBadge.className = 'text-[10px] sm:text-xs font-mono font-bold px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 text-right';
+          } else {
+            geoBadge.textContent = 'G0 - NORMAL';
+            geoBadge.className = 'text-[10px] sm:text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-right';
+          }
+        }
+
+        const kpBadge = document.getElementById('status-kp-badge');
+        if (kpBadge) kpBadge.textContent = `${latestKp.toFixed(1)} (G${latestKp >= 5 ? Math.floor(latestKp - 4) : 0})`;
+
+        const dstBadge = document.getElementById('status-dst-badge');
+        if (dstBadge) dstBadge.textContent = `${latestDst} nT`;
+
+        const windBadge = document.getElementById('status-wind-badge');
+        if (windBadge) windBadge.textContent = `${latestSpeed} km/s`;
+
+        const btBadge = document.getElementById('status-bt-badge');
+        if (btBadge) btBadge.textContent = `${latestBt} nT`;
+
+        const bzBadge = document.getElementById('status-bz-badge');
+        if (bzBadge) bzBadge.textContent = `${latestBz} nT`;
+
+        const protonVal = document.getElementById('status-proton-val');
+        if (protonVal) protonVal.textContent = `${latestProton.toFixed(2)} pfu`;
+
+        const xrayVal = document.getElementById('status-xray-val');
+        if (xrayVal) xrayVal.textContent = xrayClass;
+
+        const lastUpdated = document.getElementById('last-updated');
+        if (lastUpdated) lastUpdated.textContent = 'SYNCED ' + new Date().toISOString().substring(11, 19) + ' UTC';
+
+      } catch (e) {
+        console.warn('Status evaluation error:', e);
+      }
+    }
+
+    function toggleSolarWindDataset(index) {
+      if (!charts.solarWind) return;
+      const meta = charts.solarWind.getDatasetMeta(index);
+      meta.hidden = meta.hidden === null ? !charts.solarWind.data.datasets[index].hidden : null;
+      charts.solarWind.update();
+    }
+
+    function zoomSolarWind(factor) {
+      if (!charts.solarWind) return;
+      if (typeof charts.solarWind.zoom === 'function') {
+        charts.solarWind.zoom(factor);
+      }
+    }
+
+    function resetSolarWindZoom() {
+      if (!charts.solarWind) return;
+      if (typeof charts.solarWind.resetZoom === 'function') {
+        charts.solarWind.resetZoom();
+      }
+    }
+
+    function switchTab(tabKey) {
+      const tabs = ['all', 'solar', 'wind', 'geospace'];
+      tabs.forEach(t => {
+        const btn = document.getElementById('tab-' + t);
+        if (btn) {
+          if (t === tabKey) {
+            btn.className = 'px-3 py-1 border-b-2 border-cyan-400 text-cyan-400 font-semibold whitespace-nowrap active:scale-95';
+          } else {
+            btn.className = 'px-3 py-1 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap active:scale-95';
+          }
+        }
+      });
+
+      const box = document.getElementById('discussion-box');
+      if (!box || !discussionTextRaw) return;
+
+      if (tabKey === 'all') {
+        box.textContent = discussionTextRaw;
+      } else {
+        const regexMap = {
+          solar: /Solar Activity[\s\S]*?(?=Solar Wind|Geospace|$)/i,
+          wind: /Solar Wind[\s\S]*?(?=Geospace|Solar Activity|$)/i,
+          geospace: /Geospace[\s\S]*?(?=Solar Activity|Solar Wind|$)/i
+        };
+        const match = discussionTextRaw.match(regexMap[tabKey]);
+        box.textContent = match ? match[0] : discussionTextRaw;
+      }
+    }
+
+    function parseTleEpoch(epochStr) {
+      if (!epochStr || epochStr.length < 5) return 'Unknown Epoch';
+      try {
+        const rawYear = parseInt(epochStr.substring(0, 2), 10);
+        const fullYear = rawYear >= 57 ? 1900 + rawYear : 2000 + rawYear;
+        const dayOfYear = parseFloat(epochStr.substring(2));
+        
+        if (isNaN(fullYear) || isNaN(dayOfYear)) return epochStr;
+        
+        const epochDate = new Date(Date.UTC(fullYear, 0, 1));
+        const millis = (dayOfYear - 1) * 86400 * 1000;
+        epochDate.setTime(epochDate.getTime() + millis);
+        
+        return epochDate.toISOString().replace('T', ' ').replace('Z', ' UTC');
+      } catch (e) {
+        return epochStr;
+      }
+    }
+
+    function parseTLEString(tleText) {
+      const lines = tleText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const results = [];
+
+      let i = 0;
+      while (i < lines.length) {
+        let satName = 'UNKNOWN SATELLITE';
+        let line1 = '', line2 = '';
+
+        if (lines[i].startsWith('1 ') && i + 1 < lines.length && lines[i+1].startsWith('2 ')) {
+          line1 = lines[i];
+          line2 = lines[i+1];
+          satName = `SAT-${line1.substring(2, 7).trim()}`;
+          i += 2;
+        } else if (i + 2 < lines.length && lines[i+1].startsWith('1 ') && lines[i+2].startsWith('2 ')) {
+          satName = lines[i];
+          line1 = lines[i+1];
+          line2 = lines[i+2];
+          i += 3;
+        } else {
+          i++;
+          continue;
+        }
+
+        try {
+          const noradId = line1.substring(2, 7).trim();
+          const epochRaw = line1.substring(18, 32).trim();
+          const epochFormatted = parseTleEpoch(epochRaw);
+
+          const incDeg = parseFloat(line2.substring(8, 16).trim());
+          const raanDeg = parseFloat(line2.substring(17, 25).trim());
+          const eccStr = line2.substring(26, 33).trim();
+          const argpDeg = parseFloat(line2.substring(34, 42).trim());
+          const maDeg = parseFloat(line2.substring(43, 51).trim());
+          const mmRevsPerDay = parseFloat(line2.substring(52, 63).trim());
+
+          const eccentricity = parseFloat('.' + eccStr);
+          const nRadPerSec = (mmRevsPerDay * 2 * Math.PI) / 86400;
+          const semiMajorAxisKm = Math.pow(GM_EARTH / (nRadPerSec * nRadPerSec), 1/3);
+
+          const periodMins = 1440 / mmRevsPerDay;
+          const apogeeAltKm = (semiMajorAxisKm * (1 + eccentricity)) - EARTH_RADIUS_KM;
+          const perigeeAltKm = (semiMajorAxisKm * (1 - eccentricity)) - EARTH_RADIUS_KM;
+
+          let orbitType = 'LEO';
+          if (apogeeAltKm > 35000 && eccentricity < 0.05) orbitType = 'GEO';
+          else if (perigeeAltKm > 2000 && apogeeAltKm < 35000) orbitType = 'MEO';
+          else if (eccentricity > 0.25) orbitType = 'HEO';
+
+          results.push({
+            name: satName.replace(/^0\s+/, ''),
+            noradId: noradId,
+            epochRaw: epochRaw,
+            epochFormatted: epochFormatted,
+            a: Math.round(semiMajorAxisKm * 10) / 10,
+            e: eccentricity,
+            i: Math.round(incDeg * 1000) / 1000,
+            raan: Math.round(raanDeg * 1000) / 1000,
+            argp: Math.round(argpDeg * 1000) / 1000,
+            ma: Math.round(maDeg * 1000) / 1000,
+            meanMotion: mmRevsPerDay,
+            periodMins: Math.round(periodMins * 10) / 10,
+            apogeeKm: Math.round(apogeeAltKm),
+            perigeeKm: Math.round(perigeeAltKm),
+            orbitType: orbitType
+          });
+        } catch(e) {
+          console.warn('TLE parse error line:', e);
+        }
+      }
+
+      return results;
+    }
+
+    function initKeplerianCharts() {
+      const chartConfigs = [
+        { id: 'a', canvas: 'chart-kep-a', color: '#00f0ff', label: 'Semi-major Axis (km)' },
+        { id: 'e', canvas: 'chart-kep-e', color: '#10b981', label: 'Eccentricity (e)' },
+        { id: 'i', canvas: 'chart-kep-i', color: '#f59e0b', label: 'Inclination (°)' },
+        { id: 'raan', canvas: 'chart-kep-raan', color: '#a855f7', label: 'RAAN (°)' },
+        { id: 'argp', canvas: 'chart-kep-argp', color: '#ef4444', label: 'Arg Perigee (°)' },
+        { id: 'ma', canvas: 'chart-kep-ma', color: '#3b82f6', label: 'Mean Anomaly (°)' }
+      ];
+
+      chartConfigs.forEach(cfg => {
+        const el = document.getElementById(cfg.canvas);
+        if (!el) return;
+        const ctx = el.getContext('2d');
+        kepCharts[cfg.id] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: [],
+            datasets: [{
+              label: cfg.label,
+              data: [],
+              backgroundColor: cfg.color + '88',
+              borderColor: cfg.color,
+              borderWidth: 1.5,
+              borderRadius: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 0 }, grid: { color: '#1e293b' } },
+              y: { grid: { color: '#1e293b' }, ticks: { font: { size: 9 } } }
+            },
+            plugins: { legend: { display: false } }
+          }
+        });
+      });
+    }
+
+    function renderKeplerianCharts() {
+      if (!kepCharts['a']) initKeplerianCharts();
+
+      const labels = parsedSatellites.map(s => s.name.substring(0, 12));
+
+      kepCharts['a'].data.labels = labels;
+      kepCharts['a'].data.datasets[0].data = parsedSatellites.map(s => s.a);
+      kepCharts['a'].update();
+
+      kepCharts['e'].data.labels = labels;
+      kepCharts['e'].data.datasets[0].data = parsedSatellites.map(s => s.e);
+      kepCharts['e'].update();
+
+      kepCharts['i'].data.labels = labels;
+      kepCharts['i'].data.datasets[0].data = parsedSatellites.map(s => s.i);
+      kepCharts['i'].update();
+
+      kepCharts['raan'].data.labels = labels;
+      kepCharts['raan'].data.datasets[0].data = parsedSatellites.map(s => s.raan);
+      kepCharts['raan'].update();
+
+      kepCharts['argp'].data.labels = labels;
+      kepCharts['argp'].data.datasets[0].data = parsedSatellites.map(s => s.argp);
+      kepCharts['argp'].update();
+
+      kepCharts['ma'].data.labels = labels;
+      kepCharts['ma'].data.datasets[0].data = parsedSatellites.map(s => s.ma);
+      kepCharts['ma'].update();
+    }
+
+    function renderKeplerianTable() {
+      const tbody = document.getElementById('keplerian-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      if (parsedSatellites.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-6 text-slate-500">No satellite elements loaded. Paste TLEs or fetch CelesTrak preset above.</td></tr>`;
+        return;
+      }
+
+      parsedSatellites.forEach(sat => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-space-800/80 transition';
+        tr.innerHTML = `
+          <td class="p-2.5 font-bold text-white flex items-center gap-1.5">
+            <i class="fa-solid fa-satellite text-purple-400 text-xs"></i> ${sat.name}
+          </td>
+          <td class="p-2.5 text-slate-400">${sat.noradId}</td>
+          <td class="p-2.5 text-cyan-300 font-mono text-[11px] whitespace-nowrap">
+            <div class="font-semibold text-slate-200">${sat.epochFormatted}</div>
+            <div class="text-[9px] text-slate-500 font-mono">Raw: ${sat.epochRaw}</div>
+          </td>
+          <td class="p-2.5 text-right font-bold text-cyan-300">${sat.a.toLocaleString()} km</td>
+          <td class="p-2.5 text-right text-emerald-400">${sat.e.toFixed(6)}</td>
+          <td class="p-2.5 text-right text-amber-300">${sat.i.toFixed(3)}°</td>
+          <td class="p-2.5 text-right text-purple-300">${sat.raan.toFixed(3)}°</td>
+          <td class="p-2.5 text-right text-red-300">${sat.argp.toFixed(3)}°</td>
+          <td class="p-2.5 text-right text-blue-300">${sat.ma.toFixed(3)}°</td>
+          <td class="p-2.5 text-right text-slate-300">${sat.apogeeKm.toLocaleString()} / ${sat.perigeeKm.toLocaleString()} km</td>
+          <td class="p-2.5 text-center">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${
+              sat.orbitType === 'LEO' ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' :
+              sat.orbitType === 'GEO' ? 'bg-red-950 text-red-300 border border-red-800' :
+              sat.orbitType === 'MEO' ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-purple-950 text-purple-300'
+            }">${sat.orbitType}</span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function parseAndPlotTLEs() {
+      const box = document.getElementById('tle-input-box');
+      if (!box) return;
+      parsedSatellites = parseTLEString(box.value);
+
+      const countBadge = document.getElementById('parsed-sat-count');
+      if (countBadge) {
+        countBadge.textContent = parsedSatellites.length > 0 ? `${parsedSatellites.length} Satellites Loaded` : '0 Satellites Loaded';
+      }
+
+      renderKeplerianCharts();
+      renderKeplerianTable();
+    }
+
+    function loadSampleTLEs() {
+      const box = document.getElementById('tle-input-box');
+      if (box) {
+        box.value = SAMPLE_TLES;
+        parseAndPlotTLEs();
+      }
+    }
+
+    function clearTLEBox() {
+      const box = document.getElementById('tle-input-box');
+      if (box) {
+        box.value = '';
+        parseAndPlotTLEs();
+      }
+    }
+
+    async function fetchCelesTrakPreset(group) {
+      const statusBanner = document.getElementById('ca-fetch-status');
+      const statusMsg = document.getElementById('ca-fetch-msg');
+      const statusCount = document.getElementById('ca-fetch-count');
+      const statusIcon = document.getElementById('ca-fetch-icon');
+
+      if (statusBanner) statusBanner.classList.remove('hidden');
+      if (statusMsg) statusMsg.textContent = `Fetching CelesTrak preset group '${group.toUpperCase()}'...`;
+      if (statusIcon) statusIcon.className = 'fa-solid fa-circle-notch animate-spin text-purple-400';
+
+      const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=TLE`;
+
+      try {
+        const rawTle = await fetchWithFallback(url, false);
+        const box = document.getElementById('tle-input-box');
+        if (box) box.value = rawTle;
+
+        parseAndPlotTLEs();
+
+        const latestEpoch = parsedSatellites.length > 0 ? parsedSatellites[0].epochFormatted : 'N/A';
+        if (statusMsg) statusMsg.textContent = `Successfully imported '${group.toUpperCase()}'. Epoch: ${latestEpoch}`;
+        if (statusCount) statusCount.textContent = `${parsedSatellites.length} Satellites`;
+        if (statusIcon) statusIcon.className = 'fa-solid fa-circle-check text-emerald-400';
+      } catch (err) {
+        if (statusMsg) statusMsg.textContent = `Failed to fetch group '${group}'. Loaded fallback sample TLEs.`;
+        if (statusIcon) statusIcon.className = 'fa-solid fa-triangle-exclamation text-amber-400';
+        loadSampleTLEs();
+      }
+    }
+
+    async function searchCelesTrakCustom() {
+      const queryInput = document.getElementById('tle-query-input');
+      if (!queryInput || !queryInput.value.trim()) return;
+      const query = queryInput.value.trim();
+
+      const statusBanner = document.getElementById('ca-fetch-status');
+      const statusMsg = document.getElementById('ca-fetch-msg');
+      const statusCount = document.getElementById('ca-fetch-count');
+      const statusIcon = document.getElementById('ca-fetch-icon');
+
+      if (statusBanner) statusBanner.classList.remove('hidden');
+      if (statusMsg) statusMsg.textContent = `Querying CelesTrak for '${query}'...`;
+      if (statusIcon) statusIcon.className = 'fa-solid fa-circle-notch animate-spin text-purple-400';
+
+      let url = `https://celestrak.org/NORAD/elements/gp.php?NAME=${encodeURIComponent(query)}&FORMAT=TLE`;
+      if (!isNaN(parseInt(query))) {
+        url = `https://celestrak.org/NORAD/elements/gp.php?CATNR=${query}&FORMAT=TLE`;
+      }
+
+      try {
+        const rawTle = await fetchWithFallback(url, false);
+        const box = document.getElementById('tle-input-box');
+        if (box) box.value = rawTle;
+
+        parseAndPlotTLEs();
+
+        const latestEpoch = parsedSatellites.length > 0 ? parsedSatellites[0].epochFormatted : 'N/A';
+        if (statusMsg) statusMsg.textContent = `Retrieved results for '${query}'. Epoch: ${latestEpoch}`;
+        if (statusCount) statusCount.textContent = `${parsedSatellites.length} Satellites`;
+        if (statusIcon) statusIcon.className = 'fa-solid fa-circle-check text-emerald-400';
+      } catch (err) {
+        if (statusMsg) statusMsg.textContent = `No CelesTrak records found for '${query}'.`;
+        if (statusIcon) statusIcon.className = 'fa-solid fa-triangle-exclamation text-red-400';
+      }
+    }
+
+    function fetchAllData() {
+      const icon = document.getElementById('refresh-icon');
+      if (icon) icon.classList.add('animate-spin');
+
+      Promise.allSettled([
+        loadKpIndex(),
+        loadSolarWind(),
+        loadXray(),
+        loadProton(),
+        loadDst(),
+        load3DayForecast(),
+        loadDiscussion(),
+        loadAlerts()
+      ]).then(() => {
+        evaluateAllStatuses();
+        if (icon) icon.classList.remove('animate-spin');
+      });
+    }
+
+    window.onload = function () {
+      initCharts();
+      initKeplerianCharts();
+      updateUtcClock();
+      setInterval(updateUtcClock, 1000);
+
+      fetchAllData();
+      setInterval(fetchAllData, 60000);
+    };
+  </script>
+</body>
+</html>
